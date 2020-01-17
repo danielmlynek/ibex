@@ -8,6 +8,9 @@
  *
  * Baugh-Wooley multiplier and Long Division
  */
+  `ifdef _VCP
+ `include "prim_assert.sv" //we need include this file bcs FuseSoC generate separate compilation, so assert macros is in different vlog, and we can't see them here 
+ `endif
 module ibex_multdiv_slow (
     input  logic             clk_i,
     input  logic             rst_ni,

@@ -14,6 +14,9 @@
  * This module is fully combinatorial, clock and reset are used for
  * assertions only.
  */
+  `ifdef _VCP
+ `include "prim_assert.sv" //we need include this file bcs FuseSoC generate separate compilation, so assert macros is in different vlog, and we can't see them here 
+ `endif
 module ibex_decoder #(
     parameter bit RV32E = 0,
     parameter bit RV32M = 1

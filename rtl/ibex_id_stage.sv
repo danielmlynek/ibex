@@ -13,6 +13,9 @@
  * Decode stage of the core. It decodes the instructions and hosts the register
  * file.
  */
+  `ifdef _VCP
+ `include "prim_assert.sv" //we need include this file bcs FuseSoC generate separate compilation, so assert macros is in different vlog, and we can't see them here 
+ `endif
 module ibex_id_stage #(
     parameter bit RV32E = 0,
     parameter bit RV32M = 1

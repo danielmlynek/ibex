@@ -9,6 +9,9 @@
  * input port: send address and data to the FIFO
  * clear_i clears the FIFO for the following cycle, including any new request
  */
+  `ifdef _VCP
+ `include "prim_assert.sv" //we need include this file bcs FuseSoC generate separate compilation, so assert macros is in different vlog, and we can't see them here 
+ `endif
 module ibex_fetch_fifo #(
   parameter int unsigned NUM_REQS = 2
 ) (

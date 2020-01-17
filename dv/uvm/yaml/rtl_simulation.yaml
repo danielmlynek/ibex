@@ -75,16 +75,28 @@
               -sv -uvm -uvmhome CDNS-1.2
               -f ibex_dv.f
               -elaborate -licqueue
-              -l <out>/ius/compile.log <cov_opts>"
-    cov_opts: >
-      -coverage all
-      -covfile cover.ccf
+              -l <out>/ius/compile.log"
   sim:
     cmd: >
-      irun -R -nclibdirpath <out>/ius <sim_opts> -svseed <seed> -licqueue <wave_opts> <cov_opts>
-    cov_opts: >
-      -covoverwrite
-      -covworkdir <out>/cov_work
-      -covbaserun test
+      irun -R -nclibdirpath <out>/ius <sim_opts> -svseed <seed> -licqueue <wave_opts>
     wave_opts: >
       -input <cwd>/ius.tcl
+
+- tool: riviera
+  env_var: ALDEC_PATH
+  compile:
+    cmd:
+      - "vlib <out>/work"
+      - "vlog -work <out>/work
+        +incdir+<ALDEC_PATH>/vlib/uvm-1.2/src
+        +incdir+${PRJ_DIR}/ibex/shared/rtl
+        -l uvm_1_2
+        -err VCP2694 W1
+        -f ibex_dv.f"
+
+  sim:
+    cmd: >
+      vsim -c <sim_opts> <cov_opts> -lib <out>/work -l <out>/logfile.log -do "run -all; endsim; quit -force" +ibex_tracer_file_base="trace_core"
+    cov_opts: >
+      -acdb_file <out>/cov.acdb
+

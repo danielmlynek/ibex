@@ -9,6 +9,9 @@
  * Control and Status Registers (CSRs) following the RISC-V Privileged
  * Specification, draft version 1.11
  */
+  `ifdef _VCP
+ `include "prim_assert.sv" //we need include this file bcs FuseSoC generate separate compilation, so assert macros is in different vlog, and we can't see them here 
+ `endif
 module ibex_cs_registers #(
     parameter bit          DbgTriggerEn     = 0,
     parameter int unsigned MHPMCounterNum   = 8,

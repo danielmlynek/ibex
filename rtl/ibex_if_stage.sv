@@ -9,6 +9,9 @@
  * Instruction fetch unit: Selection of the next PC, and buffering (sampling) of
  * the read instruction.
  */
+  `ifdef _VCP
+ `include "prim_assert.sv" //we need include this file bcs FuseSoC generate separate compilation, so assert macros is in different vlog, and we can't see them here 
+ `endif
 module ibex_if_stage #(
     parameter int unsigned DmHaltAddr      = 32'h1A110800,
     parameter int unsigned DmExceptionAddr = 32'h1A110808

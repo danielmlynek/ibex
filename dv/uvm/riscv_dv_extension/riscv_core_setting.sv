@@ -20,12 +20,6 @@
 // XLEN
 parameter int XLEN = 32;
 
-// Vector extension parameters - not used in Ibex
-parameter int VECTOR_EXTENSION_ENABLE = 0;
-parameter int VLEN = 512;
-parameter int ELEN = 64;
-parameter int SLEN = 64;
-
 // Parameter for SATP mode, set to BARE if address translation is not supported
 parameter satp_mode_t SATP_MODE = BARE;
 
@@ -80,7 +74,11 @@ int kernel_program_instr_cnt = 400;
 // ----------------------------------------------------------------------------
 
 // Implemented previlieged CSR list
+`ifdef _VCP //DKO4049
+const privileged_reg_t implemented_csr[] = {
+`else
 parameter privileged_reg_t implemented_csr[] = {
+`endif
     // Machine mode mode CSR
     MVENDORID,        // Vendor ID
     MARCHID,          // Architecture ID
@@ -151,14 +149,20 @@ parameter privileged_reg_t implemented_csr[] = {
 // --------------------------------------------------------------------------
 // Supported interrupt/exception setting, used for functional coverage
 // --------------------------------------------------------------------------
-
+`ifdef _VCP //DKO4049
+const interrupt_cause_t implemented_interrupt[] = {
+`else
 parameter interrupt_cause_t implemented_interrupt[] = {
+`endif
   M_SOFTWARE_INTR,
   M_TIMER_INTR,
   M_EXTERNAL_INTR
 };
-
+`ifdef _VCP //DKO4049
+const exception_cause_t implemented_exception[] = {
+`else
 parameter exception_cause_t implemented_exception[] = {
+`endif
   INSTRUCTION_ACCESS_FAULT,
   ILLEGAL_INSTRUCTION,
   BREAKPOINT,

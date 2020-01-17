@@ -9,9 +9,6 @@
 default_exc_handler:
   jal x0, simple_exc_handler
 
-timer_handler:
-  jal x0, simple_timer_handler
-
 reset_handler:
   /* set all registers to zero */
   mv  x1, x0
@@ -87,15 +84,13 @@ sleep_loop:
   .section .vectors, "ax"
   .option norvc;
 
-  // All unimplemented interrupts/exceptions go to the default_exc_handler.
+  // All traps go to the same default_exc_handler. Create a landing pad of nops
+  // as IRQs can come into different addresses.
   .org 0x00
-  .rept 7
-  jal x0, default_exc_handler
+  .rept 31
+  nop
   .endr
-  jal x0, timer_handler
-  .rept 23
   jal x0, default_exc_handler
-  .endr
 
   // reset vector
   .org 0x80

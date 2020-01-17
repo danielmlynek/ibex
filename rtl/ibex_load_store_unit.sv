@@ -9,6 +9,9 @@
  * Load Store Unit, used to eliminate multiple access during processor stalls,
  * and to align bytes and halfwords.
  */
+  `ifdef _VCP
+ `include "prim_assert.sv" //we need include this file bcs FuseSoC generate separate compilation, so assert macros is in different vlog, and we can't see them here 
+ `endif
 module ibex_load_store_unit (
     input  logic         clk_i,
     input  logic         rst_ni,
