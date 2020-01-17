@@ -1,7 +1,2 @@
 PyYAML
 bitstring
-Sphinx
-Pallets-Sphinx-Themes
-sphinxcontrib-log-cabinet
-sphinx-issues
-rst2pdf

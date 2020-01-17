@@ -60,7 +60,6 @@ class riscv_instr_gen_config extends uvm_object;
   rand bit               mstatus_sum;
   rand bit               mstatus_tvm;
   rand bit [1:0]         mstatus_fs;
-  rand bit [1:0]         mstatus_vs;
   rand mtvec_mode_t      mtvec_mode;
 
   // Floating point rounding mode
@@ -87,9 +86,6 @@ class riscv_instr_gen_config extends uvm_object;
 
   // Virtual address translation is on for this test
   rand bit               virtual_addr_translation_on;
-
-  // Vector extension setting
-  rand riscv_vector_cfg  vector_cfg;
 
   //-----------------------------------------------------------------------------
   //  User space memory region and stack setting
@@ -167,8 +163,6 @@ class riscv_instr_gen_config extends uvm_object;
   bit                    enable_illegal_csr_instruction;
   // Enable accessing CSRs at an invalid privilege level
   bit                    enable_access_invalid_csr_level;
-  // Enable misaligned instruction (caused by JALR instruction)
-  bit                    enable_misaligned_instr;
   // Enable some dummy writes to main system CSRs (xSTATUS/xIE) at beginning of test
   // to check repeated writes
   bit                    enable_dummy_csr_write;
@@ -216,8 +210,6 @@ class riscv_instr_gen_config extends uvm_object;
   riscv_reg_t            reserved_regs[];
   // Floating point support
   bit                    enable_floating_point;
-  // Vector extension support
-  bit                    enable_vector_extension;
 
   //-----------------------------------------------------------------------------
   // Command line options for instruction distribution control
@@ -347,7 +339,7 @@ class riscv_instr_gen_config extends uvm_object;
   }
 
   constraint ra_c {
-    ra dist {RA := 3, T1 := 2, [SP:T0] :/ 1, [T2:T6] :/ 4};
+    ra dist {RA := 5, T1 := 2, [SP:T0] :/ 1, [T2:T6] :/ 2};
     ra != sp;
     ra != tp;
     ra != ZERO;
@@ -355,6 +347,7 @@ class riscv_instr_gen_config extends uvm_object;
 
   constraint sp_tp_c {
     sp != tp;
+    sp dist {SP := 6, RA := 1, [GP:T6] :/ 3};
     !(sp inside {GP, RA, ZERO});
     !(tp inside {GP, RA, ZERO});
   }
@@ -369,7 +362,14 @@ class riscv_instr_gen_config extends uvm_object;
     foreach (gpr[i]) {
       !(gpr[i] inside {sp, tp, scratch_reg, ZERO, RA, GP});
     }
-    unique {gpr};
+`ifdef _VCP //DAM3819
+	foreach (gpr[i])
+		foreach (gpr[j]) 
+			if (i!=j) {gpr[i] != gpr[j]};
+`else
+	unique {gpr};
+`endif
+    
   }
 
   constraint addr_translaction_c {
@@ -380,20 +380,25 @@ class riscv_instr_gen_config extends uvm_object;
       virtual_addr_translation_on == 1'b0;
     }
   }
+  
+`ifdef _VCP //"addr_translaction_c" constraint problem
+ //_VCP: Alternative constraint for cfg object randomization - solve before commented since "init_privileged_mode" 
+ // variable has a rand_mode disabled
+  constraint _vcp_addr_translaction_c {
+    //solve init_privileged_mode before virtual_addr_translation_on;
+    if ((init_privileged_mode != MACHINE_MODE) && (SATP_MODE != BARE)) {
+      virtual_addr_translation_on == 1'b1;
+    } else {
+      virtual_addr_translation_on == 1'b0;
+    }
+  }
+`endif  
 
   constraint floating_point_c {
     if (enable_floating_point) {
       mstatus_fs == 2'b01;
     } else {
       mstatus_fs == 2'b00;
-    }
-  }
-
-  constraint mstatus_vs_c {
-    if (enable_vector_extension) {
-      mstatus_vs == 2'b01;
-    } else {
-      mstatus_vs == 2'b00;
     }
   }
 
@@ -426,7 +431,6 @@ class riscv_instr_gen_config extends uvm_object;
     `uvm_field_int(bare_program_mode, UVM_DEFAULT)
     `uvm_field_int(enable_illegal_csr_instruction, UVM_DEFAULT)
     `uvm_field_int(enable_access_invalid_csr_level, UVM_DEFAULT)
-    `uvm_field_int(enable_misaligned_instr, UVM_DEFAULT)
     `uvm_field_int(enable_dummy_csr_write, UVM_DEFAULT)
     `uvm_field_int(randomize_csr, UVM_DEFAULT)
     `uvm_field_int(allow_sfence_exception, UVM_DEFAULT)
@@ -447,12 +451,14 @@ class riscv_instr_gen_config extends uvm_object;
     `uvm_field_int(max_branch_step, UVM_DEFAULT)
     `uvm_field_int(max_directed_instr_stream_seq, UVM_DEFAULT)
     `uvm_field_int(enable_floating_point, UVM_DEFAULT)
-    `uvm_field_int(enable_vector_extension, UVM_DEFAULT)
   `uvm_object_utils_end
 
   function new (string name = "");
     string s;
     super.new(name);
+`ifdef _VCP //"addr_translaction_c" constraint problem
+	_vcp_addr_translaction_c.constraint_mode(0);
+`endif
     init_delegation();
     inst = uvm_cmdline_processor::get_inst();
     get_int_arg_value("+num_of_tests=", num_of_tests);
@@ -470,7 +476,6 @@ class riscv_instr_gen_config extends uvm_object;
     get_bool_arg_value("+no_csr_instr=", no_csr_instr);
     get_bool_arg_value("+enable_illegal_csr_instruction=", enable_illegal_csr_instruction);
     get_bool_arg_value("+enable_access_invalid_csr_level=", enable_access_invalid_csr_level);
-    get_bool_arg_value("+enable_misaligned_instr=", enable_misaligned_instr);
     get_bool_arg_value("+enable_dummy_csr_write=", enable_dummy_csr_write);
     get_bool_arg_value("+allow_sfence_exception=", allow_sfence_exception);
     get_bool_arg_value("+no_data_page=", no_data_page);
@@ -496,7 +501,6 @@ class riscv_instr_gen_config extends uvm_object;
     get_bool_arg_value("+enable_debug_single_step=", enable_debug_single_step);
     get_bool_arg_value("+set_mstatus_tw=", set_mstatus_tw);
     get_bool_arg_value("+enable_floating_point=", enable_floating_point);
-    get_bool_arg_value("+enable_vector_extension=", enable_vector_extension);
     if(inst.get_arg_value("+boot_mode=", boot_mode_opts)) begin
       `uvm_info(get_full_name(), $sformatf(
                 "Got boot mode option - %0s", boot_mode_opts), UVM_LOW)
@@ -507,6 +511,13 @@ class riscv_instr_gen_config extends uvm_object;
         default: `uvm_fatal(get_full_name(),
                   $sformatf("Illegal boot mode option - %0s", boot_mode_opts))
       endcase
+`ifdef _VCP //"addr_translaction_c" constraint problem
+// Original code disables rand mode of init_privileged_mode variable that is hovewer used 
+// in solve...before in "addr_translaction_c constraint" - this causes error. To solve this 
+// problem oryginal constraint is disabled and replaced by _vcp_addr_translaction_c alternative constraint
+	addr_translaction_c.constraint_mode(0);
+	_vcp_addr_translaction_c.constraint_mode(1);
+`endif
       init_privileged_mode.rand_mode(0);
     end
     `uvm_info(`gfn, $sformatf("riscv_instr_pkg::supported_privileged_mode = %0d",
@@ -532,7 +543,6 @@ class riscv_instr_gen_config extends uvm_object;
     if (!(RV32C inside {supported_isa})) begin
       disable_compressed_instr = 1;
     end
-    vector_cfg = riscv_vector_cfg::type_id::create("vector_cfg");
     setup_instr_distribution();
     get_invalid_priv_lvl_csr();
   endfunction

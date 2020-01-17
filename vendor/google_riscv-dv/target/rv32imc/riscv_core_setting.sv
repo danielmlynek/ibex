@@ -51,12 +51,6 @@ bit support_sfence = 0;
 // Support unaligned load/store
 bit support_unaligned_load_store = 1'b1;
 
-// Parameter for vector extension
-parameter int VECTOR_EXTENSION_ENABLE = 0;
-parameter int VLEN = 512;
-parameter int ELEN = 64;
-parameter int SLEN = 64;
-
 // ----------------------------------------------------------------------------
 // Previleged CSR implementation
 // ----------------------------------------------------------------------------
@@ -65,7 +59,11 @@ parameter int SLEN = 64;
 `ifdef DSIM
 privileged_reg_t implemented_csr[] = {
 `else
+`ifdef _VCP //DKO4049
+privileged_reg_t implemented_csr[] = {
+`else
 parameter privileged_reg_t implemented_csr[] = {
+`endif
 `endif
     // Machine mode mode CSR
     MVENDORID,  // Vendor ID
@@ -91,7 +89,11 @@ parameter privileged_reg_t implemented_csr[] = {
 `ifdef DSIM
 interrupt_cause_t implemented_interrupt[] = {
 `else
+`ifdef _VCP //DKO4049
+interrupt_cause_t implemented_interrupt[] = {
+`else
 parameter interrupt_cause_t implemented_interrupt[] = {
+`endif
 `endif
     M_SOFTWARE_INTR,
     M_TIMER_INTR,
@@ -101,8 +103,13 @@ parameter interrupt_cause_t implemented_interrupt[] = {
 `ifdef DSIM
 exception_cause_t implemented_exception[] = {
 `else
+`ifdef _VCP //DKO4049
+exception_cause_t implemented_exception[] = {
+`else
 parameter exception_cause_t implemented_exception[] = {
 `endif
+`endif
+    INSTRUCTION_ADDRESS_MISALIGNED,
     INSTRUCTION_ACCESS_FAULT,
     ILLEGAL_INSTRUCTION,
     BREAKPOINT,

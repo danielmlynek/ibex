@@ -83,6 +83,7 @@
                 +incdir+<setting>
                 +incdir+<user_extension>
                 -f <cwd>/files.f
+                -err VCP2694 W1
                 -l <out>/dsim/compile.log <cmp_opts>"
   sim:
     cmd: >

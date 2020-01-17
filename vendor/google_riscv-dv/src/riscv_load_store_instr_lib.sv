@@ -118,7 +118,13 @@ class riscv_load_store_base_instr_stream extends riscv_mem_access_stream;
     riscv_instr instr;
     if(avail_regs.size() > 0) begin
       `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(avail_regs,
+`ifdef _VCP //DAM3819
+										foreach (avail_regs[i])
+											foreach (avail_regs[j]) 
+												if (i!=j) {avail_regs[i] != avail_regs[j]};
+`else
                                          unique{avail_regs};
+`endif
                                          avail_regs[0] inside {[S0 : A5]};
                                          foreach(avail_regs[i]) {
                                            !(avail_regs[i] inside {cfg.reserved_regs, reserved_rd});
@@ -132,6 +138,74 @@ class riscv_load_store_base_instr_stream extends riscv_mem_access_stream;
       // Assign the allowed load/store instructions based on address alignment
       // This is done separately rather than a constraint to improve the randomization performance
       allowed_instr = {LB, LBU, SB};
+`ifdef _VCP //DST642
+      if (!cfg.enable_unaligned_load_store) begin
+        if (addr[i][0] == 1'b0) begin
+          allowed_instr = {riscv_instr_name_t'(LH), riscv_instr_name_t'(LHU), riscv_instr_name_t'(SH), allowed_instr};
+        end
+        if (addr[i] % 4 == 0) begin
+          allowed_instr = {riscv_instr_name_t'(LW), riscv_instr_name_t'(SW), allowed_instr};
+          if (cfg.enable_floating_point) begin
+            allowed_instr = {riscv_instr_name_t'(FLW), riscv_instr_name_t'(FSW), allowed_instr};
+          end
+          if((offset[i] inside {[0:127]}) && (offset[i] % 4 == 0) &&
+             (RV32C inside {riscv_instr_pkg::supported_isa}) &&
+             enable_compressed_load_store) begin
+            if (rs1_reg == SP) begin
+              `uvm_info(`gfn, "Add LWSP/SWSP to allowed instr", UVM_LOW)
+              allowed_instr = {riscv_instr_name_t'(C_LWSP), riscv_instr_name_t'(C_SWSP)};
+            end else begin
+              allowed_instr = {riscv_instr_name_t'(C_LW), riscv_instr_name_t'(C_SW), allowed_instr};
+              if (cfg.enable_floating_point && (RV32FC inside {supported_isa})) begin
+                allowed_instr = {riscv_instr_name_t'(C_FLW), riscv_instr_name_t'(C_FSW), allowed_instr};
+              end
+            end
+          end
+        end
+        if ((XLEN >= 64) && (addr[i] % 8 == 0)) begin
+          allowed_instr = {riscv_instr_name_t'(LWU), riscv_instr_name_t'(LD), riscv_instr_name_t'(SD), allowed_instr};
+          if (cfg.enable_floating_point && (RV32D inside {supported_isa})) begin
+            allowed_instr = {riscv_instr_name_t'(FLD), riscv_instr_name_t'(FSD), allowed_instr};
+          end
+          if((offset[i] inside {[0:255]}) && (offset[i] % 8 == 0) &&
+             (RV64C inside {riscv_instr_pkg::supported_isa} &&
+             enable_compressed_load_store)) begin
+            if (rs1_reg == SP) begin
+              allowed_instr = {riscv_instr_name_t'(C_LDSP), C_SDSP};
+            end else begin
+              allowed_instr = {riscv_instr_name_t'(C_LD), riscv_instr_name_t'(C_SD), allowed_instr};
+              if (cfg.enable_floating_point && (RV32DC inside {supported_isa})) begin
+                allowed_instr = {riscv_instr_name_t'(C_FLD), riscv_instr_name_t'(C_FSD), allowed_instr};
+              end
+            end
+          end
+        end
+      end else begin // unaligned load/store
+        allowed_instr = {riscv_instr_name_t'(LW), riscv_instr_name_t'(SW), riscv_instr_name_t'(LH), riscv_instr_name_t'(LHU), riscv_instr_name_t'(SH), allowed_instr};
+        // Compressed load/store still needs to be aligned
+        if ((offset[i] inside {[0:127]}) && (offset[i] % 4 == 0) &&
+            (RV32C inside {riscv_instr_pkg::supported_isa}) &&
+            enable_compressed_load_store) begin
+            if (rs1_reg == SP) begin
+              allowed_instr = {riscv_instr_name_t'(C_LWSP), riscv_instr_name_t'(C_SWSP)};
+            end else begin
+              allowed_instr = {riscv_instr_name_t'(C_LW), riscv_instr_name_t'(C_SW), allowed_instr};
+            end
+        end
+        if (XLEN >= 64) begin
+          allowed_instr = {riscv_instr_name_t'(LWU), riscv_instr_name_t'(LD), riscv_instr_name_t'(SD), allowed_instr};
+          if ((offset[i] inside {[0:255]}) && (offset[i] % 8 == 0) &&
+              (RV64C inside {riscv_instr_pkg::supported_isa}) &&
+              enable_compressed_load_store) begin
+              if (rs1_reg == SP) begin
+                allowed_instr = {riscv_instr_name_t'(C_LWSP), riscv_instr_name_t'(C_SWSP)};
+              end else begin
+                allowed_instr = {riscv_instr_name_t'(C_LD), riscv_instr_name_t'(C_SD), allowed_instr};
+              end
+           end
+        end
+      end
+`else
       if (!cfg.enable_unaligned_load_store) begin
         if (addr[i][0] == 1'b0) begin
           allowed_instr = {LH, LHU, SH, allowed_instr};
@@ -198,6 +272,7 @@ class riscv_load_store_base_instr_stream extends riscv_mem_access_stream;
            end
         end
       end
+`endif
       instr = riscv_instr::get_load_store_instr(allowed_instr);
       instr.has_rs1 = 0;
       instr.has_imm = 0;
@@ -279,50 +354,34 @@ endclass
 // This instruction stream focus more on hazard handling of load store unit.
 class riscv_load_store_hazard_instr_stream extends riscv_load_store_base_instr_stream;
 
-  rand int hazard_ratio;
-
-  constraint hazard_ratio_c {
-    hazard_ratio inside {[20:100]};
-  }
+  rand int avail_addr[];
 
   constraint legal_c {
-    num_load_store inside {[10:20]};
-    num_mixed_instr inside {[1:7]};
+    num_load_store inside {[10:30]};
+    num_mixed_instr inside {[10:30]};
+  }
+
+  constraint avail_addr_c {
+    avail_addr.size() inside {[1:3]};
+    foreach(avail_addr[i]) {
+      avail_addr[i] inside {[0 : max_load_store_offset - 1]};
+    }
   }
 
   `uvm_object_utils(riscv_load_store_hazard_instr_stream)
   `uvm_object_new
 
-  virtual function void randomize_offset();
-    int offset_, addr_;
-    offset = new[num_load_store];
-    addr = new[num_load_store];
-    for (int i = 0; i < num_load_store; i++) begin
-      if ((i > 0) && ($urandom_range(0, 100) < hazard_ratio)) begin
-        offset[i] = offset[i-1];
-        addr[i] = addr[i-1];
-      end else begin
-        if (!std::randomize(offset_, addr_) with {
-          if (locality == NARROW) {
-            soft offset_ inside {[-16:16]};
-          } else if (locality == HIGH) {
-            soft offset_ inside {[-64:64]};
-          } else if (locality == MEDIUM) {
-            soft offset_ inside {[-256:256]};
-          } else if (locality == SPARSE) {
-            soft offset_ inside {[-2048:2047]};
-          }
-          addr_ == base + offset_;
-          addr_ inside {[0 : max_load_store_offset - 1]};
-        }) begin
-          `uvm_fatal(`gfn, "Cannot randomize load/store offset")
-        end
-        offset[i] = offset_;
-        addr[i] = addr_;
-      end
+  // Randomize each address in the post_randomize to reduce the complexity of solving everything
+  // in one shot.
+  function void post_randomize();
+    int temp_addr;
+    foreach(addr[i]) begin
+      `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(temp_addr,
+                                         temp_addr inside {avail_addr};,
+                                         "Cannot randomize address")
+      addr[i] = temp_addr;
     end
-  endfunction : randomize_offset
-
+  endfunction
 endclass
 
 // Back to back access to multiple data pages
@@ -340,7 +399,13 @@ class riscv_multi_page_load_store_instr_stream extends riscv_mem_access_stream;
     }
     data_page_id.size() == num_of_instr_stream;
     rs1_reg.size() == num_of_instr_stream;
+`ifdef _VCP //DAM3819
+	foreach (rs1_reg[i])
+		foreach (rs1_reg[j]) 
+			if (i!=j) {rs1_reg[i] != rs1_reg[j]};
+`else
     unique {rs1_reg};
+`endif
     foreach(rs1_reg[i]) {
       !(rs1_reg[i] inside {cfg.reserved_regs, ZERO});
     }
@@ -349,7 +414,13 @@ class riscv_multi_page_load_store_instr_stream extends riscv_mem_access_stream;
   constraint page_c {
     solve num_of_instr_stream before data_page_id;
     num_of_instr_stream inside {[1 : max_data_page_id]};
+`ifdef _VCP //DAM3819
+	foreach (data_page_id[i])
+		foreach (data_page_id[j]) 
+			if (i!=j) {data_page_id[i] != data_page_id[j]};
+`else
     unique {data_page_id};
+`endif
   }
 
   // Avoid accessing a large number of pages because we may run out of registers for rs1
@@ -466,7 +537,7 @@ class riscv_load_store_rand_addr_instr_stream extends riscv_load_store_base_inst
     )
     li_instr.imm_str = $sformatf("0x%0x", addr_offset);
     // Add offset to the base address
-    add_instr = riscv_instr::get_instr(ADD);
+    add_instr = riscv_instr::get_rand_instr(.include_instr({ADD}));
     `DV_CHECK_RANDOMIZE_WITH_FATAL(add_instr,
        rs1 == gpr;
        rs2 == li_instr.rd;
@@ -475,7 +546,7 @@ class riscv_load_store_rand_addr_instr_stream extends riscv_load_store_base_inst
     instr.push_back(li_instr);
     instr.push_back(add_instr);
     // Create SW instruction template
-    store_instr = riscv_instr::get_instr(SB);
+    store_instr = riscv_instr::get_rand_instr(.include_instr({SB}));
     `DV_CHECK_RANDOMIZE_WITH_FATAL(store_instr,
        instr_name == SB;
        rs1 == gpr;

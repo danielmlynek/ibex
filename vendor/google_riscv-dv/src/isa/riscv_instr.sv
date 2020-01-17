@@ -69,15 +69,8 @@ class riscv_instr extends uvm_object;
   bit                        has_imm = 1'b1;
 
   constraint imm_c {
-    if (instr_name inside {SLLIW, SRLIW, SRAIW}) {
+    if (instr_name inside {SLLI, SRLI, SRAI, SLLIW, SRLIW, SRAIW}) {
       imm[11:5] == 0;
-    }
-    if (instr_name inside {SLLI, SRLI, SRAI}) {
-      if (XLEN == 32) {
-        imm[11:5] == 0;
-      } else {
-        imm[11:6] == 0;
-      }
     }
   }
 
@@ -109,7 +102,6 @@ class riscv_instr extends uvm_object;
     instr_category.delete();
     foreach (instr_registry[instr_name]) begin
       riscv_instr instr_inst;
-      if (instr_name inside {unsupported_instr}) continue;
       instr_inst = create_instr(instr_name);
       instr_template[instr_name] = instr_inst;
       // C_JAL is RV32C only instruction
@@ -119,6 +111,8 @@ class riscv_instr extends uvm_object;
       end
       if (!cfg.enable_sfence && instr_name == SFENCE_VMA) continue;
       if (cfg.no_fence && (instr_name inside {FENCE, FENCE_I, SFENCE_VMA})) continue;
+      // TODO: gcc compile issue, support c.addi4spn later
+      if (instr_name == C_ADDI4SPN) continue;
       if ((instr_inst.group inside {supported_isa}) &&
           !(cfg.disable_compressed_instr &&
             (instr_inst.group inside {RV32C, RV64C, RV32DC, RV32FC, RV128C})) &&
@@ -172,6 +166,29 @@ class riscv_instr extends uvm_object;
   static function void build_basic_instruction_list(riscv_instr_gen_config cfg);
     basic_instr = {instr_category[SHIFT], instr_category[ARITHMETIC],
                    instr_category[LOGICAL], instr_category[COMPARE]};
+`ifdef _VCP //DST642
+	if (!cfg.no_ebreak) begin
+      basic_instr = {basic_instr, riscv_instr_name_t'(EBREAK)};
+      foreach (riscv_instr_pkg::supported_isa[i]) begin
+        if (RV32C inside {riscv_instr_pkg::supported_isa[i]}) begin
+          basic_instr = {basic_instr, riscv_instr_name_t'(C_EBREAK)};
+          break;
+        end
+      end
+    end
+    if (cfg.no_dret == 0) begin
+      basic_instr = {basic_instr, riscv_instr_name_t'(DRET)};
+    end
+    if (cfg.no_fence == 0) begin
+      basic_instr = {basic_instr, instr_category[SYNCH]};
+    end
+    if ((cfg.no_csr_instr == 0) && (cfg.init_privileged_mode == MACHINE_MODE)) begin
+      basic_instr = {basic_instr, instr_category[CSR]};
+    end
+    if (cfg.no_wfi == 0) begin
+      basic_instr = {basic_instr, riscv_instr_name_t'(WFI)};
+    end
+`else				   
     if (!cfg.no_ebreak) begin
       basic_instr = {basic_instr, EBREAK};
       foreach (riscv_instr_pkg::supported_isa[i]) begin
@@ -193,35 +210,32 @@ class riscv_instr extends uvm_object;
     if (cfg.no_wfi == 0) begin
       basic_instr = {basic_instr, WFI};
     end
+`endif
   endfunction : build_basic_instruction_list
 
   static function riscv_instr get_rand_instr(riscv_instr instr_h = null,
-                                             riscv_instr_name_t include_instr[$] = {},
-                                             riscv_instr_name_t exclude_instr[$] = {},
-                                             riscv_instr_category_t include_category[$] = {},
-                                             riscv_instr_category_t exclude_category[$] = {},
-                                             riscv_instr_group_t include_group[$] = {},
-                                             riscv_instr_group_t exclude_group[$] = {});
+                                             riscv_instr_name_t include_instr[] = {},
+                                             riscv_instr_name_t exclude_instr[] = {},
+                                             riscv_instr_category_t include_category[] = {},
+                                             riscv_instr_category_t exclude_category[] = {},
+                                             riscv_instr_group_t include_group[] = {},
+                                             riscv_instr_group_t exclude_group[] = {});
      int unsigned idx;
      riscv_instr_name_t name;
-     riscv_instr_name_t allowed_instr[$];
-     riscv_instr_name_t disallowed_instr[$];
-     riscv_instr_category_t allowed_categories[$];
+     riscv_instr_name_t allowed_instr[];
+     riscv_instr_name_t disallowed_instr[];
+     riscv_instr_category_t allowed_categories[];
      foreach (include_category[i]) begin
        allowed_instr = {allowed_instr, instr_category[include_category[i]]};
      end
      foreach (exclude_category[i]) begin
-       if (instr_category.exists(exclude_category[i])) begin
-         disallowed_instr = {disallowed_instr, instr_category[exclude_category[i]]};
-       end
+       disallowed_instr = {disallowed_instr, instr_category[exclude_category[i]]};
      end
      foreach (include_group[i]) begin
        allowed_instr = {allowed_instr, instr_group[include_group[i]]};
      end
      foreach (exclude_group[i]) begin
-       if (instr_group.exists(exclude_group[i])) begin
-         disallowed_instr = {disallowed_instr, instr_group[exclude_group[i]]};
-       end
+       disallowed_instr = {disallowed_instr, instr_group[exclude_group[i]]};
      end
      disallowed_instr = {disallowed_instr, exclude_instr};
      if (disallowed_instr.size() == 0) begin
@@ -261,7 +275,11 @@ class riscv_instr extends uvm_object;
      int unsigned idx;
      riscv_instr_name_t name;
      if (load_store_instr.size() == 0) begin
-       load_store_instr = {instr_category[LOAD], instr_category[STORE]};
+`ifdef _VCP //Probably error in an original file?
+	 load_store_instr = {instr_category[LOAD], instr_category[STORE]}; //Or:  riscv_instr::instr_category[LOAD], riscv_instr::instr_category[STORE]
+`else
+       //load_store_instr = {instr_group[LOAD], instr_group[STORE]};
+`endif 
      end
      idx = $urandom_range(0, load_store_instr.size()-1);
      name = load_store_instr[idx];
@@ -269,16 +287,6 @@ class riscv_instr extends uvm_object;
      instr_h = new instr_template[name];
      return instr_h;
   endfunction : get_load_store_instr
-
-  static function riscv_instr get_instr(riscv_instr_name_t name);
-     riscv_instr instr_h;
-     if (!instr_template.exists(name)) begin
-       `uvm_fatal("riscv_instr", $sformatf("Cannot get instr %0s", name.name()))
-     end
-     // Shallow copy for all relevant fields, avoid using create() to improve performance
-     instr_h = new instr_template[name];
-     return instr_h;
-  endfunction : get_instr
 
   // Disable the rand mode for unused operands to randomization performance
   virtual function void set_rand_mode();

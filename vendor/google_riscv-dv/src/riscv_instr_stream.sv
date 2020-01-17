@@ -219,10 +219,18 @@ class riscv_rand_instr_stream extends riscv_instr_stream;
     riscv_instr_name_t exclude_instr[];
     if ((SP inside {reserved_rd, cfg.reserved_regs}) ||
         ((avail_regs.size() > 0) && !(SP inside {avail_regs}))) begin
+`ifdef _VCP //DST642
+      exclude_instr = {riscv_instr_name_t'(C_ADDI4SPN), riscv_instr_name_t'(C_ADDI16SP), riscv_instr_name_t'(C_LWSP), riscv_instr_name_t'(C_LDSP)};
+`else
       exclude_instr = {C_ADDI4SPN, C_ADDI16SP, C_LWSP, C_LDSP};
+`endif
     end
     if (is_in_debug && !cfg.enable_ebreak_in_debug_rom) begin
+`ifdef _VCP //DST642
+      exclude_instr = {exclude_instr, riscv_instr_name_t'(EBREAK), riscv_instr_name_t'(C_EBREAK)};
+`else
       exclude_instr = {exclude_instr, EBREAK, C_EBREAK};
+`endif
     end
     instr = riscv_instr::get_rand_instr(.include_instr(allowed_instr),
                                         .exclude_instr(exclude_instr));
@@ -242,24 +250,25 @@ class riscv_rand_instr_stream extends riscv_instr_stream;
           rd  inside {avail_regs};
         }
       }
-      foreach (reserved_rd[i]) {
+      if (reserved_rd.size() > 0) {
         if (has_rd) {
-          rd != reserved_rd[i];
+          !(rd inside {reserved_rd});
         }
         if (format == CB_FORMAT) {
-          rs1 != reserved_rd[i];
+          !(rs1 inside {reserved_rd});
         }
       }
-      foreach (cfg.reserved_regs[i]) {
+      if (cfg.reserved_regs.size() > 0) {
         if (has_rd) {
-          rd != cfg.reserved_regs[i];
+          !(rd inside {cfg.reserved_regs});
         }
         if (format == CB_FORMAT) {
-          rs1 != cfg.reserved_regs[i];
+          !(rs1 inside {cfg.reserved_regs});
         }
       }
       // TODO: Add constraint for CSR, floating point register
     )
   endfunction
+
 
 endclass
